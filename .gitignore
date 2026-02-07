@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.cache/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+data/run_log.csv
+
+# Local data copies (keep template tracked)
+data/*.csv
+!data/daten_template.csv
