@@ -14,7 +14,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 CSV_PATH = Path("data/daten_template.csv")
 LOG_PATH = Path("data/run_log.csv")
 DEBUG = False
-HEADLESS = False
+HEADLESS = True
 DRY_RUN = False  # Set False to submit entries
 TIMEOUT_MS = 120000
 
