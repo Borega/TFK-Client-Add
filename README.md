@@ -30,7 +30,7 @@ Credentials are requested with a popup if `USERNAME` and `PASSWORD` are not set.
 ## Finding selectors
 Option A (recommended):
 - Run Playwright codegen while logged in:
-  - python -m playwright codegen https://<your-opnsense-host>
+   - python -m playwright codegen https://your-opnsense-host
 - Click the Add button and the input fields to capture selectors.
 
 Option B:
