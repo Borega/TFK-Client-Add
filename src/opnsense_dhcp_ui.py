@@ -13,6 +13,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 CSV_PATH = Path("data/daten_template.csv")
 LOG_PATH = Path("data/run_log.csv")
+TEMP_CSV_PATH = Path("data/to_add.csv")
 DEBUG = False
 HEADLESS = True
 DRY_RUN = False  # Set False to submit entries
@@ -68,6 +69,18 @@ def read_csv(path: Path) -> List[DhcpRow]:
                 continue
             rows.append(DhcpRow(hostname=hostname, mac=mac, ip=ip))
     return rows
+
+
+def check_csv_format(path: Path) -> bool:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter=";")
+        headers = [h.lower() for h in (reader.fieldnames or [])]
+        required = {"ip", "mac"}
+        name_ok = "name" in headers or "geraet" in headers
+        if not required.issubset(set(headers)) or not name_ok:
+            print("CSV format invalid. Required columns: Name or Geraet, MAC, IP")
+            return False
+    return True
 
 
 def validate_rows(rows: List[DhcpRow]) -> List[DhcpRow]:
@@ -256,9 +269,40 @@ def append_log(lines: List[str]) -> None:
             handle.write(line + "\n")
 
 
+def build_existing_sets(page) -> tuple[set[str], set[str], set[str]]:
+    table_selector = SELECTORS.get("static_leases_table")
+    if not table_selector:
+        return set(), set(), set()
+    try:
+        table = page.locator(table_selector)
+        table.wait_for(timeout=5000)
+        text = table.inner_text()
+    except PlaywrightTimeoutError:
+        if DEBUG:
+            print("DEBUG: static leases table not found for existing check")
+        return set(), set(), set()
+
+    macs = {m.group(0) for m in MAC_RE.finditer(text)}
+    ips = {m.group(0) for m in IP_RE.finditer(text)}
+    words = {w.strip() for w in text.split() if w.strip()}
+    return macs, ips, words
+
+
+def write_temp_csv(rows: List[DhcpRow]) -> None:
+    TEMP_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with TEMP_CSV_PATH.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, delimiter=";")
+        writer.writerow(["Name", "MAC", "IP"])
+        for row in rows:
+            writer.writerow([row.hostname, row.mac, row.ip])
+
+
 def main() -> int:
     if not CSV_PATH.exists():
         print(f"CSV not found: {CSV_PATH}")
+        return 1
+
+    if not check_csv_format(CSV_PATH):
         return 1
 
     print(f"DEBUG: Using CSV at {CSV_PATH}") if DEBUG else None
@@ -299,7 +343,32 @@ def main() -> int:
             open_dashboard(page)
             wait_for_add_button(page)
 
+        existing_macs, existing_ips, existing_names = build_existing_sets(page)
+
+        unique_rows: List[DhcpRow] = []
+        seen_macs: set[str] = set()
+        seen_ips: set[str] = set()
+        seen_names: set[str] = set()
+
         for row in rows:
+            if row.mac in seen_macs or row.ip in seen_ips or row.hostname in seen_names:
+                log_lines.append(f"{row.hostname};{row.mac};{row.ip};skipped;duplicate in csv")
+                continue
+            seen_macs.add(row.mac)
+            seen_ips.add(row.ip)
+            seen_names.add(row.hostname)
+            unique_rows.append(row)
+
+        rows_to_add: List[DhcpRow] = []
+        for row in unique_rows:
+            if row.mac in existing_macs or row.ip in existing_ips or row.hostname in existing_names:
+                log_lines.append(f"{row.hostname};{row.mac};{row.ip};skipped;already exists")
+                continue
+            rows_to_add.append(row)
+
+        write_temp_csv(rows_to_add)
+
+        for row in rows_to_add:
             print(f"DEBUG: Processing {row.hostname} {row.mac} {row.ip}") if DEBUG else None
             optional_clear_search(page)
             if find_existing_by_mac(page, row.mac):
@@ -330,6 +399,9 @@ def main() -> int:
 
     append_log(log_lines)
     print(f"Log written to {LOG_PATH}")
+
+    if TEMP_CSV_PATH.exists():
+        TEMP_CSV_PATH.unlink()
 
     print("Done.")
     return 0
