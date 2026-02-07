@@ -7,11 +7,14 @@ This project automates adding DHCP static mappings in the OPNsense UI without us
 - CSV-driven entries
 - Safer interaction via selectors (not screen coordinates)
 - Run log for each CSV row
+- Pre-checks for duplicates and existing leases
+- Clean temp CSV for rows to add
 
 ## Files
 - CSV template: data/daten_template.csv (Name;Raum;IP;MAC;Besitzer;Inventarnummer;Beschreibung)
 - Script: src/opnsense_dhcp_ui.py
 - Log output: data/run_log.csv
+- Temp CSV (auto-deleted): data/to_add.csv
 
 ## Setup
 1. Create a virtual environment and install dependencies:
@@ -43,4 +46,5 @@ Option B:
 - The script supports dry-run mode for safety.
 - Validation is applied to MAC and IP formats before submission.
 - The CSV parser reads only Name/Geraet, MAC, and IP columns (case-insensitive) and ignores the rest.
+- The script skips rows if any of MAC/IP/Name already exist in the static lease table.
 - Set `HEADLESS = False` if you want a visible browser window.
